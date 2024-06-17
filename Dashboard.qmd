@@ -1,0 +1,89 @@
+---
+title: "Leopard_Dashboard"
+author: "Groupe Leopard"
+format: dashboard
+editor: visual
+---
+
+```{r}
+# Libraries ----
+library(reprex)
+library(tidyverse)
+library(sf)
+
+# Data ----
+df0 <- read_csv("Data/fourrure.csv")
+```
+
+```{r}
+paris_point <- 
+  df0 %>% 
+  filter(City == "Paris") %>% 
+  pull(wkt) %>% 
+  head(1) %>% 
+  str_remove_all("POINT\\(|\\)") %>% 
+  str_split_1(" ") %>% 
+  as.numeric() %>% 
+  st_point() %>% 
+  st_sfc()
+
+df0 %>% 
+  drop_na(wkt) %>% 
+  mutate(wkt = str_remove_all(wkt, "POINT\\(|\\)"),
+         wkt = str_split(wkt, " "),
+         wkt = map(wkt, ~as.numeric(c(.[[1]], .[[2]]))),
+         wkt = map(wkt, st_point),
+         wkt = st_sfc(wkt),
+         geo_dist = map_dbl(wkt, st_distance, paris_point)
+        )
+```
+
+```{r}
+# Beeswarm
+# https://ggplot2.tidyverse.org/reference/geom_dotplot.html
+```
+
+```{r}
+# Streamgraph / Stacked area
+# https://r-graph-gallery.com/stacked-area-graph.html
+# https://r-graph-gallery.com/streamgraph.html
+```
+
+```{r}
+# Cluster Analysis
+# http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/114-mca-multiple-correspondence-analysis-in-r-essentials/
+# http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/117-hcpc-hierarchical-clustering-on-principal-components-essentials/
+
+
+# Libraries
+library(FactoMineR)
+library(factoextra)
+
+# Data
+data(tea)
+
+tt <- select(tea, breakfast, lunch, dinner)
+
+mca_res <- MCA(tt, graph = FALSE)
+
+res <- HCPC(mca_res, nb.clust = -1, nb.par = 300)
+
+
+clust1_id <- 
+  res$data.clust %>% 
+  rowid_to_column("id") %>% 
+  filter(clust == 1) %>% 
+  pull(id)
+
+centroid1 <- 
+  mca_res$ind$coor[clust1_id,] %>% 
+  colMeans()
+
+# Cluster centroid distance
+mca_res$ind$coor %>% 
+  rbind(centroid1) %>% 
+  dist(upper = TRUE) %>% 
+  as.matrix() %>% 
+  .["centroid1",] %>% 
+  .[1:nrow(tt)]
+```

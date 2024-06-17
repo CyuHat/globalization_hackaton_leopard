@@ -1,0 +1,151 @@
+---
+title: "Rapport"
+author: "Groupe léopard"
+format: html
+editor: visual
+---
+
+```{r}
+library(reprex)
+library(tidyverse)
+library(hrbrthemes)
+
+# Options
+theme_set(theme_ipsum())
+
+# Data
+df0 <- read_rds("MyData/df0.rds")
+```
+
+## Introduction
+
+### Compte univarié
+
+**Date**
+
+```{r}
+df0 %>% 
+  mutate(Date = floor_date(Date, unit = "year")) %>% 
+  count(Date) %>% 
+  ggplot(aes(Date, n)) +
+  geom_col() +
+  labs(y = NULL,
+       title = "Nombre d'image dans le temps")
+```
+
+### Country
+
+```{r}
+df0 %>% 
+  count(Country) %>% 
+  ggplot(aes(fct_reorder(Country, -n), n)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(x = NULL,
+       y = NULL,
+       title = "Nombre d'image par pays")
+```
+
+### City
+
+```{r}
+df0 %>% 
+  count(City) %>%
+  slice_max(n, n = 10) %>% 
+  ggplot(aes(fct_reorder(City, -n), n)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(x = NULL,
+       y = NULL,
+       title = "Top 10 des villes ayant le plus d'image")
+```
+
+### Journal type
+
+```{r}
+df0 %>% 
+  count(`Journal Type`) %>%
+  drop_na() %>% 
+  slice_max(n, n = 10) %>% 
+  ggplot(aes(fct_reorder(`Journal Type`, -n), n)) +
+  geom_col() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(x = NULL,
+       y = NULL,
+       title = "Top 10 des villes ayant le plus d'image")
+```
+
+### Compte bivarié dans le temps par pays
+
+```{r}
+top10_countries <- 
+  df0 %>% 
+  count(Country) %>% 
+  slice_max(n, n = 10) %>% 
+  pull(Country)
+
+gg0_country <- 
+  df0 %>% 
+  filter(Country %in% top10_countries,
+         Date > date("1850-01-01")) %>% 
+  mutate(Date = floor_date(Date, unit = "year")) %>% 
+  count(Date, Country)
+  
+gg_country <- 
+  gg0_country %>% 
+  ggplot(aes(Date, n, fill = Country)) +
+  geom_col() +
+  labs(y = NULL,
+       title = "Nombre d'image dans le temps par pays",
+       subtitle = "Top 10") +
+  theme(legend.position = "top")
+
+gg0_country
+```
+
+### Compte bivarié dans le temps par Ville
+
+```{r}
+top10_countries <- 
+  df0 %>% 
+  count(City) %>% 
+  slice_max(n, n = 10) %>% 
+  arrange(-n) %>% 
+  slice(1:10) %>% 
+  pull(City)
+
+df0 %>% 
+  filter(City %in% top10_countries) %>% 
+  mutate(Date = floor_date(Date, unit = "year")) %>% 
+  count(Date, City) %>% 
+  ggplot(aes(Date, n, fill = City)) +
+  geom_col() +
+  labs(y = NULL,
+       title = "Nombre d'image dans le temps par pays") +
+  theme(legend.position = "top")
+```
+
+### Compte bivarié dans le temps par type de journal
+
+```{r}
+#|fig-width: 24
+
+top10_countries <- 
+  df0 %>% 
+  count(`Journal Type`) %>% 
+  drop_na() %>% 
+  slice_max(n, n = 10) %>% 
+  arrange(-n) %>% 
+  slice(1:10) %>% 
+  pull(`Journal Type`)
+
+df0 %>% 
+  filter(`Journal Type` %in% top10_countries) %>% 
+  mutate(Date = floor_date(Date, unit = "year")) %>% 
+  count(Date, `Journal Type`) %>% 
+  ggplot(aes(Date, n, fill = `Journal Type`)) +
+  geom_col() +
+  labs(y = NULL,
+       title = "Nombre d'image dans le temps par pays") +
+  theme(legend.position = "top")
+```

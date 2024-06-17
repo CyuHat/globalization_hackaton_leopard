@@ -1,0 +1,35 @@
+---
+title: "Léopard représentation du sauvage"
+author: "Groupe Léopard"
+format: html
+editor: visual
+execute: 
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#|warning: false
+#|message: false
+#|echo: false
+library(reprex)
+library(tidyverse)
+library(httr2)
+```
+
+```{r}
+#|warning: false
+df0 <- 
+  read_csv("Data/fourrure.csv") %>% 
+  arrange(Date)
+
+df0 %>% 
+  select(Title, Date, Country, City, `Journal Type`, image_url) %>% 
+  mutate(Title = str_c('<a href="', image_url, '">', Title, '</a>'),
+         image_url = str_c('<img src="', image_url, '">')) %>% 
+  rowid_to_column("ID") %>% 
+  DT::datatable(escape = FALSE, filter = 'top', options = list(
+  pageLength = 10, autoWidth = TRUE
+))
+```
