@@ -10,12 +10,30 @@ editor: visual
 library(reprex)
 library(tidyverse)
 library(sf)
+library(FactoMineR)
+library(factoextra)
+library(hrbrthemes)
+library(ggforce)
+
+# Options ----
+theme_set(theme_ipsum())
 
 # Data ----
-df0 <- read_csv("Data/fourrure.csv")
+df0 <- 
+  read_csv("Data/fourrure_2.csv") %>% 
+  mutate(Date = dmy(Date)) %>% 
+  arrange(Date) %>% 
+  rename("gender" = "gender (M/F/NA)",
+         "photographic" = "photographic? (yes/no)",
+         "vetement" = "vêtement (chair, costume, accessoire)",
+         "alterite" = "altérité (distance, performance, normatif)") %>% 
+  rowid_to_column("Id") %>% 
+  select(-`bugs (x si pas sûr que léopard)`, -tags)
+  
 ```
 
 ```{r}
+# Distance géographique
 paris_point <- 
   df0 %>% 
   filter(City == "Paris") %>% 
@@ -27,7 +45,8 @@ paris_point <-
   st_point() %>% 
   st_sfc()
 
-df0 %>% 
+distance_geographique <- 
+  df0 %>% 
   drop_na(wkt) %>% 
   mutate(wkt = str_remove_all(wkt, "POINT\\(|\\)"),
          wkt = str_split(wkt, " "),
@@ -35,55 +54,251 @@ df0 %>%
          wkt = map(wkt, st_point),
          wkt = st_sfc(wkt),
          geo_dist = map_dbl(wkt, st_distance, paris_point)
-        )
-```
-
-```{r}
-# Beeswarm
-# https://ggplot2.tidyverse.org/reference/geom_dotplot.html
+        ) %>% 
+  pull(geo_dist)
 ```
 
 ```{r}
 # Streamgraph / Stacked area
 # https://r-graph-gallery.com/stacked-area-graph.html
 # https://r-graph-gallery.com/streamgraph.html
+
+df0 %>%
+  filter(gender %in% c("F", "M"),
+         Year >= 1900) %>%
+  mutate(photographic = if_else(photographic == "yes", "photographic", "other")) %>% 
+  count(Year = round(Year, -1), gender, photographic) %>% 
+  replace_na(list(gender = "Non genré")) %>% 
+  # mutate(prop = n/sum(n),
+  #        .by = Year) %>% 
+  unite(category, gender, photographic) %>% 
+  mutate(category = case_match(category,
+                               "F_photographic" ~ "Photographie féminine",
+                               "M_photographic" ~ "Photographie masculin",
+                               "F_other" ~ "Autre féminin",
+                               "M_other" ~ "Autre masculine")) %>% 
+  ggplot(aes(Year, n, fill = category)) +
+  geom_area(position = "stack", color = "black") +
+  labs(title = "Évolution de la photographie de léopard",
+        x = NULL,
+        y = NULL,
+       fill = NULL) +
+  theme_ipsum(grid = "x") +
+  scale_y_continuous(labels = NULL) +
+  theme(legend.position = "top",
+        plot.background = element_rect(fill = "gold1")) +
+  scale_fill_brewer(palette = "RdGy")
+
+# df0 %>% 
+#   filter(gender %in% c("F", "M")) %>% 
+#   mutate(gender = factor(gender)) %>% 
+#   glm(gender ~ photographic + vetement + alterite, data = ., family = binomial) %>% 
+#   summary()
+  
 ```
 
 ```{r}
+top10_countries <- 
+  df0 %>% 
+  count(City) %>% 
+  slice_max(n, n = 10) %>% 
+  arrange(-n) %>% 
+  slice(1:10) %>% 
+  pull(City)
+
+df0 %>% 
+  filter(City %in% top10_countries) %>% 
+  mutate(Date = floor_date(Date, unit = "year")) %>% 
+  count(Date, City) %>% 
+  ggplot(aes(Date, n, fill = City == "Paris")) +
+  geom_col() +
+  labs(y = NULL,
+       title = "Number of images over time by country",
+       subtitle = "Paris leads",
+       fill = NULL) +
+  theme(legend.position = "top",
+        plot.background = element_rect(fill = "gold1")) +
+  scale_fill_brewer(palette = "RdGy", type = "qual", labels = c("Rest", "Paris"))
+```
+
+```{r}
+#| fig-width: 10
 # Cluster Analysis
 # http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/114-mca-multiple-correspondence-analysis-in-r-essentials/
 # http://www.sthda.com/english/articles/31-principal-component-methods-in-r-practical-guide/117-hcpc-hierarchical-clustering-on-principal-components-essentials/
 
+# TODO add alterite
+# TODO: update with distance, performance, normatif
+mat <- 
+  df0 %>% 
+  select(gender, photographic, vetement, alterite) 
 
-# Libraries
-library(FactoMineR)
-library(factoextra)
+mca_res <- MCA(mat, graph = FALSE, ncp = 2)
 
-# Data
-data(tea)
+fviz_mca(mca_res)
 
-tt <- select(tea, breakfast, lunch, dinner)
+res <- HCPC(mca_res, nb.clust = 4, nb.par = 12, graph = FALSE)
 
-mca_res <- MCA(tt, graph = FALSE)
+# Vluster information
+res$desc.var
 
-res <- HCPC(mca_res, nb.clust = -1, nb.par = 300)
+res$desc.ind$para
 
+df1 <- 
+  df0 %>% 
+  mutate(dim1 = mca_res$ind$coord[,1],
+         dim2 = mca_res$ind$coord[,2],
+         clust = res$data.clust$clust)
 
-clust1_id <- 
-  res$data.clust %>% 
-  rowid_to_column("id") %>% 
-  filter(clust == 1) %>% 
-  pull(id)
+df1 %>% 
+  count(clust)
 
-centroid1 <- 
-  mca_res$ind$coor[clust1_id,] %>% 
+df1 %>% 
+  ggplot(aes(dim1, dim2, fill = clust)) +
+  geom_jitter() +
+  ggforce::geom_mark_hull(aes(labels = clust), color = "black") +
+  theme_void() +
+  theme(legend.position = "none",
+        plot.background = element_rect(fill = "gold1")) +
+  scale_fill_brewer(palette = "RdGy", type = "qual")
+#   scale_color_brewer(palette = "RdGy", type = "qual")
+
+  
+```
+
+```{r}
+df1 %>% 
+  count(Year = round(Year, -1), clust) %>% 
+  ggplot(aes(Year, n, fill = clust)) + 
+  geom_area(position = "stack", color = "black") +
+  labs(title = "Évolution de la photographie de léopard",
+        x = NULL,
+        y = NULL) +
+  theme_ipsum(grid = "x") +
+  scale_y_continuous(labels = NULL) +
+  theme(legend.position = "top",
+        plot.background = element_rect(fill = "gold1")) +
+  scale_fill_brewer(palette = "RdGy", type = "qual")
+```
+
+```{r}
+res$data.clust %>% 
+  count(clust, sort = TRUE)
+
+```
+
+```{r}
+# Distance paris
+paris_id <- 
+  df0 %>% 
+  filter(City == "Paris") %>% 
+  pull(Id)
+
+paris_centroid <- 
+  mca_res$ind$coor[paris_id,] %>% 
   colMeans()
 
 # Cluster centroid distance
-mca_res$ind$coor %>% 
-  rbind(centroid1) %>% 
+distance_imaginaire <- 
+  mca_res$ind$coor %>% 
+  rbind(paris_centroid) %>% 
   dist(upper = TRUE) %>% 
   as.matrix() %>% 
-  .["centroid1",] %>% 
-  .[1:nrow(tt)]
+  .["paris_centroid",] %>% 
+  .[1:nrow(df0)]
+```
+
+```{r}
+inverse <- function(val){
+  abs(val - max(val))
+}
+
+# df1
+df2 <- 
+  df1 %>% 
+  mutate(distance_imaginaire = scales::rescale(distance_imaginaire, to = 0:1),
+         proximite_imaginaire = inverse(distance_imaginaire),
+         distance_geographique = scales::rescale(distance_geographique, to = 0:1),
+         proximite_geographique = inverse(distance_geographique))
+```
+
+```{r}
+#| fig-width: 9
+# Graphique
+
+df2 %>% 
+  ggplot(aes(proximite_geographique, proximite_imaginaire,
+             color = fct_lump(gender, n = 5))) +
+  geom_jitter(size = 3) +
+  # theme(legend.position = "none") +
+  labs(y = "Proximité imaginaire",
+       x = "Proximité géographique",
+       color = NULL) +
+  geom_abline(intercept = 0, slope = 1) +
+  theme_ipsum(grid = FALSE) +
+  theme(plot.background = element_rect(fill = "gold1"),
+        legend.position = "top",
+        legend.text=element_text(face = "bold")) +
+  scale_color_brewer(palette = "RdGy", direction = -1)
+
+df2 %>% 
+  ggplot(aes(proximite_geographique, proximite_imaginaire,
+             color = fct_lump(vetement, n = 5))) +
+  geom_jitter(size = 3) +
+  # theme(legend.position = "none") +
+  labs(y = "Proximité imaginaire",
+       x = "Proximité géographique",
+       color = NULL) +
+  geom_abline(intercept = 0, slope = 1) +
+  theme_ipsum(grid = FALSE) +
+  theme(plot.background = element_rect(fill = "gold1"),
+        legend.position = "top",
+        legend.text=element_text(face = "bold")) +
+  scale_color_brewer(palette = "RdGy", direction = -1)
+
+df2 %>% 
+  ggplot(aes(proximite_geographique, proximite_imaginaire,
+             color = fct_lump(alterite, n = 5))) +
+  geom_jitter(size = 3) +
+  # theme(legend.position = "none") +
+  labs(y = "Proximité imaginaire",
+       x = "Proximité géographique",
+       color = NULL) +
+  geom_abline(intercept = 0, slope = 1) +
+  theme_ipsum(grid = FALSE) +
+  theme(plot.background = element_rect(fill = "gold1"),
+        legend.position = "top",
+        legend.text=element_text(face = "bold")) +
+  scale_color_brewer(palette = "RdGy", direction = -1)
+
+df2 %>% 
+  ggplot(aes(proximite_geographique, proximite_imaginaire,
+             color = clust)) +
+  geom_hline(yintercept = 0.80) +
+  geom_vline(xintercept = 0.75) +
+  geom_jitter(size = 3) +
+  # theme(legend.position = "none") +
+  labs(y = "Imaginary proximity",
+       x = "Geographical proximity",
+       color = NULL) +
+  # geom_abline(intercept = 0, slope = 1) +
+  theme_ipsum(grid = FALSE) +
+  theme(plot.background = element_rect(fill = "gold1"),
+        legend.position = "top",
+        legend.text=element_text(face = "bold")) +
+  scale_color_brewer(palette = "RdGy", type = "qual")
+```
+
+```{r}
+df2 %>% 
+  filter(alterite != "altérité") %>% 
+  count(Year = round(Year, -1), alterite) %>% 
+  ggplot(aes(Year, n, fill = alterite)) +
+  geom_col() +
+  labs(fill = NULL,
+       y = NULL) +
+  theme_ipsum(grid = "y") +
+  theme(legend.position = "top",
+        plot.background = element_rect(fill = "gold1")) +
+  scale_fill_brewer(palette = "RdGy", type = "qual", direction = 0)
 ```

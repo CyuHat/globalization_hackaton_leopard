@@ -1,7 +1,9 @@
 ---
 title: "Léopard représentation du sauvage"
 author: "Groupe Léopard"
-format: html
+format: 
+  html:
+    page-layout: full
 editor: visual
 execute: 
   echo: false
@@ -16,20 +18,25 @@ execute:
 library(reprex)
 library(tidyverse)
 library(httr2)
+library(janitor)
 ```
 
 ```{r}
 #|warning: false
 df0 <- 
-  read_csv("Data/fourrure.csv") %>% 
-  arrange(Date)
+  read_csv("Data/fourrure_2.csv") %>% 
+  arrange(Date) %>% 
+  rename("gender" = "gender (M/F/NA)",
+         "photographic" = "photographic? (yes/no)",
+         "vetement" = "vêtement (chair, costume, accessoire)",
+         "alterite" = "altérité (distance, performance, normatif)")
 
 df0 %>% 
-  select(Title, Date, Country, City, `Journal Type`, image_url) %>% 
+  select(Title, Date, Country, City, `Journal Type`, photographic, gender, vetement, alterite, image_url) %>% 
   mutate(Title = str_c('<a href="', image_url, '">', Title, '</a>'),
-         image_url = str_c('<img src="', image_url, '">')) %>% 
+         image_url = str_c('<img src="', image_url, '" height="250">')) %>% 
   rowid_to_column("ID") %>% 
   DT::datatable(escape = FALSE, filter = 'top', options = list(
-  pageLength = 10, autoWidth = TRUE
+  pageLength = 20, autoWidth = TRUE
 ))
 ```
