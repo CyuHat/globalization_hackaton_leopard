@@ -160,10 +160,14 @@ df1 %>%
   theme_void() +
   theme(legend.position = "none",
         plot.background = element_rect(fill = "gold1")) +
-  scale_fill_brewer(palette = "RdGy", type = "qual")
+  scale_fill_brewer(palette = "RdGy", type = "qual") +
+  geom_point(data = tibble(dim1 = nyc_centroid[1], dim2 = nyc_centroid[2], City = "New York City"),
+             mapping = aes(dim1, dim2, fill = NULL, labels = City),
+             color = "red", size = 3) +
+  geom_point(data = tibble(dim1 = paris_centroid[1], dim2 = paris_centroid[2], City = "Paris"),
+             mapping = aes(dim1, dim2, fill = NULL, labels = City),
+             color = "blue", size = 3) 
 #   scale_color_brewer(palette = "RdGy", type = "qual")
-
-  
 ```
 
 ```{r}
@@ -185,6 +189,10 @@ df1 %>%
 res$data.clust %>% 
   count(clust, sort = TRUE)
 
+df0 %>% 
+  filter(Country == "United States of America") %>% 
+  count(City, sort = TRUE)
+
 ```
 
 ```{r}
@@ -196,6 +204,16 @@ paris_id <-
 
 paris_centroid <- 
   mca_res$ind$coor[paris_id,] %>% 
+  colMeans()
+
+# Distance USA
+nyc_id <- 
+  df0 %>% 
+  filter(City == "New York City") %>% 
+  pull(Id)
+
+nyc_centroid <- 
+  mca_res$ind$coor[nyc_id,] %>% 
   colMeans()
 
 # Cluster centroid distance
@@ -286,7 +304,8 @@ df2 %>%
   theme(plot.background = element_rect(fill = "gold1"),
         legend.position = "top",
         legend.text=element_text(face = "bold")) +
-  scale_color_brewer(palette = "RdGy", type = "qual")
+  scale_color_brewer(palette = "RdGy", type = "qual") +
+  geom_point(data = tibble())
 ```
 
 ```{r}
